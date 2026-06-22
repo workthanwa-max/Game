@@ -14,12 +14,11 @@ type GameEngineOptions = {
   onGameOver: (result: GameResult) => void
   qualityProfile: QualityProfile
   visionMode: VisionMode
+  timeLimit: number
 }
 
-const difficultyRampSeconds = 50
 const FRAME_BUDGET_MS = 16.6
 const HEAVY_FRAME_SKIP_FRAMES = 3
-const TIME_LIMIT_SECONDS = 60
 
 export class GameEngine {
   private nextEffectIndex = 0
@@ -30,6 +29,7 @@ export class GameEngine {
   private readonly onGameOver: (result: GameResult) => void
   private readonly qualityProfile: QualityProfile
   private readonly visionMode: VisionMode
+  private readonly timeLimit: number
   private readonly pool = new ObjectPool(createItemPool(40))
   private readonly effects = createEffectPool(18)
   private readonly leftHand: HandCursor = { x: 0, y: 0, radius: 30, active: false }
@@ -82,6 +82,7 @@ export class GameEngine {
     onGameOver,
     qualityProfile,
     visionMode,
+    timeLimit,
   }: GameEngineOptions) {
     const context = canvas.getContext('2d', {
       alpha: true,
@@ -98,6 +99,7 @@ export class GameEngine {
     this.onGameOver = onGameOver
     this.qualityProfile = qualityProfile
     this.visionMode = visionMode
+    this.timeLimit = timeLimit
     this.hud.score = document.getElementById('game-score')
     this.hud.health = document.getElementById('game-health')
     this.hud.healthBar = document.getElementById('game-health-bar')
@@ -224,8 +226,8 @@ export class GameEngine {
 
     const elapsedSeconds = (now - this.startedAt) / 1000
 
-    if (elapsedSeconds >= TIME_LIMIT_SECONDS) {
-      this.finish(Math.max(0, TIME_LIMIT_SECONDS - elapsedSeconds))
+    if (elapsedSeconds >= this.timeLimit) {
+      this.finish()
       return
     }
 
@@ -301,18 +303,36 @@ export class GameEngine {
     const { left, right } = this.wristRef.current
     const smoothing = this.wristRef.current.tracking ? 0.55 : 0.18
 
-    this.leftHand.active = left.visible && left.active
-    this.rightHand.active = right.visible && right.active
-    this.leftHand.x = lerp(this.leftHand.x, clamp(left.x, 0, 1) * this.canvasWidth, smoothing)
-    this.leftHand.y = lerp(this.leftHand.y, clamp(left.y, 0, 1) * this.canvasHeight, smoothing)
+    // Default seed positions used when tracking is lost to avoid the cursor disappearing
+    const defaultLeftX = this.canvasWidth * 0.38
+    const defaultLeftY = this.canvasHeight * 0.62
+    const defaultRightX = this.canvasWidth * 0.62
+    const defaultRightY = this.canvasHeight * 0.62
+
+    // LEFT
+    const leftVisible = !!left.visible
+    const targetLeftX = leftVisible ? clamp(left.x, 0, 1) * this.canvasWidth : defaultLeftX
+    const targetLeftY = leftVisible ? clamp(left.y, 0, 1) * this.canvasHeight : defaultLeftY
+
+    // Keep a visible/active cursor when tracking is lost so players cannot exploit disappearance
+    this.leftHand.active = leftVisible ? left.active : true
+    this.leftHand.x = lerp(this.leftHand.x, targetLeftX, leftVisible ? smoothing : 0.35)
+    this.leftHand.y = lerp(this.leftHand.y, targetLeftY, leftVisible ? smoothing : 0.35)
     this.leftHand.landmarks = left.landmarks?.map(l => ({ x: l.x * this.canvasWidth, y: l.y * this.canvasHeight }))
-    
-    this.rightHand.x = lerp(this.rightHand.x, clamp(right.x, 0, 1) * this.canvasWidth, smoothing)
-    this.rightHand.y = lerp(this.rightHand.y, clamp(right.y, 0, 1) * this.canvasHeight, smoothing)
+
+    // RIGHT
+    const rightVisible = !!right.visible
+    const targetRightX = rightVisible ? clamp(right.x, 0, 1) * this.canvasWidth : defaultRightX
+    const targetRightY = rightVisible ? clamp(right.y, 0, 1) * this.canvasHeight : defaultRightY
+
+    this.rightHand.active = rightVisible ? right.active : true
+    this.rightHand.x = lerp(this.rightHand.x, targetRightX, rightVisible ? smoothing : 0.35)
+    this.rightHand.y = lerp(this.rightHand.y, targetRightY, rightVisible ? smoothing : 0.35)
     this.rightHand.landmarks = right.landmarks?.map(l => ({ x: l.x * this.canvasWidth, y: l.y * this.canvasHeight }))
   }
 
   private updateItems(delta: number, elapsedSeconds: number) {
+    const difficultyRampSeconds = this.timeLimit * 0.85
     const difficulty = clamp(elapsedSeconds / difficultyRampSeconds, 0, 1)
     const activeLimit = this.getActiveItemLimit(difficulty)
 
@@ -321,7 +341,7 @@ export class GameEngine {
       const item = this.pool.acquire()
 
       if (item) {
-        activateItem(item, this.canvasWidth, this.spawnSeed, difficulty)
+        activateItem(item, this.canvasWidth, difficulty)
         this.activeItemCount += 1
         this.spawnSeed += 1
       }
@@ -421,7 +441,7 @@ export class GameEngine {
       this.lastHudScore = this.score
     }
 
-    const remainingSeconds = Math.max(0, Math.ceil(TIME_LIMIT_SECONDS - (performance.now() - this.startedAt) / 1000))
+    const remainingSeconds = Math.max(0, Math.ceil(this.timeLimit - (performance.now() - this.startedAt) / 1000))
     if (this.hud.health && remainingSeconds !== this.lastHudTime) {
       this.hud.health.textContent = `${remainingSeconds}s`
       this.shell?.classList.toggle('low-health', remainingSeconds <= 10)
@@ -443,7 +463,7 @@ export class GameEngine {
     }
   }
 
-  private finish(remainingTime = 0) {
+  private finish() {
     this.running = false
     window.cancelAnimationFrame(this.animationFrameId)
     clearCanvas(this.context, this.canvas.width, this.canvas.height)

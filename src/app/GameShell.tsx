@@ -1,19 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { CameraLayer } from '../components/CameraLayer'
-import { CalibrationScreen } from '../components/CalibrationScreen'
+import { StartPage } from '../pages/StartPage'
+import { PermissionPage } from '../pages/PermissionPage'
+import { CalibrationPage } from '../pages/CalibrationPage'
+import { CountdownPage } from '../pages/CountdownPage'
+import { ResultPage } from '../pages/ResultPage'
 import { CanvasLayer } from '../components/CanvasLayer'
-import { CountdownScreen } from '../components/CountdownScreen'
 import { HudOverlay } from '../components/HudOverlay'
-import { PermissionScreen } from '../components/PermissionScreen'
-import { ResultScreen } from '../components/ResultScreen'
-import { StartScreen } from '../components/StartScreen'
 import { drawHands, clearCanvas } from '../game/renderer'
 import { clamp } from '../game/math'
 import { GameEngine } from '../game/GameEngine'
 import { createInitialWristSnapshot } from '../state/refs'
 import { requestCameraStream, stopCameraStream } from '../vision/camera'
 import { VisionHandler } from '../vision/VisionHandler'
-import { getPhaseIndex, phaseLabels, playerJourney } from './gameFlow'
 import { getInitialQualityProfile, getVisionFps } from './performance'
 import type {
   GamePhase,
@@ -38,6 +37,7 @@ export function GameShell() {
   const [permissionStatus, setPermissionStatus] =
     useState<PermissionStatus>('idle')
   const [countdownValue, setCountdownValue] = useState(countdownStart)
+  const [timeLimit, setTimeLimit] = useState(60)
   const [result, setResult] = useState<GameResult | null>(null)
   const [tracking, setTracking] = useState(false)
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null)
@@ -53,7 +53,6 @@ export function GameShell() {
   const visionRef = useRef<VisionHandler | null>(null)
   const engineRef = useRef<GameEngine | null>(null)
   const readyStartedAtRef = useRef(0)
-  const phaseIndex = getPhaseIndex(phase)
 
   function cleanupSession(updateState = true) {
     engineRef.current?.dispose()
@@ -281,6 +280,7 @@ export function GameShell() {
       wristRef,
       qualityProfile,
       visionMode,
+      timeLimit,
       onGameOver: (gameResult) => {
         cleanupSession()
         engineRef.current = null
@@ -299,7 +299,7 @@ export function GameShell() {
         engineRef.current = null
       }
     }
-  }, [phase, qualityProfile, visionMode])
+  }, [phase, qualityProfile, visionMode, timeLimit])
 
   useEffect(() => {
     if (visionMode === 'idle') {
@@ -324,8 +324,9 @@ export function GameShell() {
     return () => window.clearInterval(intervalId)
   }, [visionMode])
 
-  function startPermissionFlow() {
+  function startPermissionFlow(selectedTimeLimit: number) {
     cleanupSession()
+    setTimeLimit(selectedTimeLimit)
     setResult(null)
     setPermissionStatus('idle')
     setCameraError('')
@@ -359,14 +360,7 @@ export function GameShell() {
     setPhase('permission')
   }
 
-  function exitGame() {
-    cleanupSession()
-    setResult(null)
-    setPermissionStatus('idle')
-    setTracking(false)
-    setVisionMode('idle')
-    setPhase('start')
-  }
+
 
   function useMockTracking() {
     cleanupSession()
@@ -389,16 +383,15 @@ export function GameShell() {
       <HudOverlay phase={phase} tracking={tracking} mode={visionMode} />
 
       <div className="ui-overlay">
-        {phase === 'start' ? <StartScreen onStart={startPermissionFlow} /> : null}
+        {phase === 'start' ? <StartPage onStart={startPermissionFlow} /> : null}
         {phase === 'permission' ? (
-          <PermissionScreen
+          <PermissionPage
             status={permissionStatus}
             errorMessage={cameraError}
             onRequestCamera={() => {
               void requestRealCamera()
             }}
             onUseMock={useMockTracking}
-            onBack={exitGame}
           />
         ) : null}
         {phase === 'camera-ready' ? (
@@ -411,23 +404,19 @@ export function GameShell() {
           </section>
         ) : null}
         {phase === 'calibration' ? (
-          <CalibrationScreen
-            isTracking={tracking}
-            isMockMode={visionMode === 'mock'}
+          <CalibrationPage
             leftReady={handStatus.left}
             rightReady={handStatus.right}
             readyProgress={readyProgress}
-            onBack={exitGame}
           />
         ) : null}
         {phase === 'countdown' ? (
-          <CountdownScreen value={countdownValue} />
+          <CountdownPage value={countdownValue} />
         ) : null}
         {phase === 'result' && result ? (
-          <ResultScreen
+          <ResultPage
             result={result}
             onPlayAgain={playAgain}
-            onExit={exitGame}
           />
         ) : null}
       </div>

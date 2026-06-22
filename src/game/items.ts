@@ -11,6 +11,10 @@ const itemKinds: GameItemKind[] = [
 ]
 const harmfulKinds: GameItemKind[] = ['pill', 'needle', 'powder', 'alcohol']
 
+// remember last spawn to optionally create nearby complementary spawns
+let lastSpawnX: number | null = null
+let lastSpawnKind: GameItemKind | null = null
+
 export function createItemPool(size: number): GameItem[] {
   return Array.from({ length: size }, (_, index) => ({
     id: index,
@@ -29,42 +33,54 @@ export function createItemPool(size: number): GameItem[] {
 export function activateItem(
   item: GameItem,
   canvasWidth: number,
-  seed: number,
   difficulty: number,
 ) {
-  const laneCount = 7
-  const lane = seed % laneCount
-  const laneWidth = canvasWidth / laneCount
-  const kind = pickItemKind(seed)
+  // Use Math.random() directly to ensure truly random item spawn positions and types
+  const rand = () => Math.random()
 
-  const margin = Math.max(80, canvasWidth * 0.08)
-  const rawX = laneWidth * lane + laneWidth * 0.5
+  const kind = pickItemKindFromRand(rand)
+
+  // spread across the full canvas width instead of fixed lanes
+  const margin = Math.max(60, canvasWidth * 0.06)
+  const rawX = margin + rand() * Math.max(0, canvasWidth - margin * 2)
+
+  // decide whether to spawn this item near the previous spawn (pairing)
+  const pairChance = 0.45
+  let finalX = rawX
+  if (lastSpawnX !== null && lastSpawnKind !== null) {
+    const lastWasHarm = harmfulKinds.includes(lastSpawnKind)
+    const thisIsHarm = harmfulKinds.includes(kind)
+    // prefer pairing harmful with non-harmful (and vice versa)
+    if (rand() < pairChance && lastWasHarm !== thisIsHarm) {
+      const maxOffset = Math.max(40, canvasWidth * 0.06)
+      finalX = Math.max(
+        margin,
+        Math.min(canvasWidth - margin, lastSpawnX + (rand() - 0.5) * maxOffset),
+      )
+    }
+  }
 
   item.active = true
   item.kind = kind
-  item.x = Math.max(margin, Math.min(canvasWidth - margin, rawX))
+  item.x = Math.max(margin, Math.min(canvasWidth - margin, finalX))
   item.y = -24
   item.radius = harmfulKinds.includes(kind) ? 22 : 18
-  item.speed = 132 + difficulty * 64 + (seed % 5) * 18
+  item.speed = 130 + difficulty * 80 + rand() * 40
   item.value = getItemValue(kind)
-  item.wobble = (seed % 9) * 0.7
+  item.wobble = (rand() - 0.5) * 3.0
   item.age = 0
+
+  // record this spawn for possible pairing next time
+  lastSpawnX = item.x
+  lastSpawnKind = kind
 }
 
-function pickItemKind(seed: number): GameItemKind {
-  if (seed % 2 === 0 || seed % 5 === 0) {
-    return harmfulKinds[seed % harmfulKinds.length]
-  }
-
-  if (seed % 11 === 0) {
-    return 'shield'
-  }
-
-  if (seed % 3 === 0) {
-    return 'heart'
-  }
-
-  return 'star'
+function pickItemKindFromRand(rand: () => number): GameItemKind {
+  const p = rand()
+  if (p < 0.38) return harmfulKinds[Math.floor(rand() * harmfulKinds.length)]
+  if (p < 0.58) return 'star'
+  if (p < 0.78) return 'heart'
+  return 'shield'
 }
 
 function getItemValue(kind: GameItemKind) {

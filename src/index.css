@@ -1,87 +1,154 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
 
 :root {
-  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-    'Segoe UI', sans-serif;
+  --font-sans: 'Orbitron', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 
-  /* legacy tokens remapped to new cream/brown theme */
-  --bg-cream: #FFF8F0;
-  --panel-cream: #F8F4EC;
-  --accent-brown: #8B5E3C;
-  --accent-brown-2: #5C3A26;
-  --muted-grey: #E6E4E1;
-  --text-dark: #3A2F2A;
-  --muted-text: #767171;
+  /* neon sci-fi tokens (will be overridden at runtime by theme.ts) */
+  --bg: #0a1128;
+  --panel: rgba(16, 24, 40, 0.8);
+  --accent: #00e6ff;
+  --accent-2: #4cc9f0;
+  --text-high: #ffffff;
+  --muted-text: #94a3b8;
+  --danger: #ff4d6d;
+  --holo-glass: rgba(12, 24, 48, 0.75);
+  --holo-border: rgba(76, 201, 240, 0.15);
 
-  /* keep old token names for compatibility with existing App.css that reference them */
-  --scanner-cyan: var(--accent-brown);
-  --scanner-cyan-glow: rgba(139,94,60,0.12);
-  --bio-hazard-red: #ff6b6b; /* kept for warnings */
-  --pulse-green: #3ddc97;
-  --deep-void-navy: var(--text-dark);
-  --holo-glass: rgba(248,244,236,0.92);
-  --holo-border: rgba(139,94,60,0.12);
-
-  /* layout / effect tokens */
-  --radius: 12px;
-  --shadow: 0 8px 24px rgba(58,47,42,0.06);
-  --shadow-strong: 0 24px 80px rgba(58,47,42,0.08);
-  --transition-fast: 180ms cubic-bezier(.2,.9,.3,1);
+  --radius: 10px;
+  --shadow: 0 10px 30px rgba(0,0,0,0.6);
+  --shadow-strong: 0 30px 90px rgba(0,0,0,0.7);
+  --transition-fast: 170ms cubic-bezier(.2,.9,.3,1);
 
   font-family: var(--font-sans);
-  color: var(--text-dark);
-  background: var(--bg-cream);
+  color: var(--text-high);
+  background: var(--bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
-html {
-  min-height: 100%;
-  background: var(--bg-cream);
-}
+html { min-height: 100%; background: var(--bg); }
 
 body {
   min-width: 320px;
   min-height: 100svh;
   margin: 0;
-  color: var(--text-dark);
-  background: var(--bg-cream);
+  color: var(--text-high);
+  background: var(--bg);
   line-height: 1.45;
   font-family: var(--font-sans);
 }
 
 /* Utility layout container */
-.container {
-  width: min(1200px, calc(100% - 32px));
-  margin: 0 auto;
-  padding: 0 16px;
-}
+.container { width: min(1200px, calc(100% - 32px)); margin: 0 auto; padding: 0 16px; }
 
 /* Card / panel helper matching theme */
 .card {
-  background: var(--panel-cream);
+  background: linear-gradient(180deg, rgba(8,12,16,0.6), rgba(6,10,14,0.4));
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   padding: 16px;
-  color: var(--text-dark);
+  color: var(--text-high);
+  border: 1px solid rgba(76,201,240,0.04);
 }
 
-/* Accessible focus for interactive elements */
-button, [role="button"], a {
-  transition: all var(--transition-fast);
+/* Buttons */
+button,
+[role="button"],
+a { transition: all var(--transition-fast); font-family: var(--font-sans); }
+
+.primary-action {
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  color: #001217;
+  border: none;
+  padding: 12px 18px;
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(0,230,255,0.12), inset 0 -2px 6px rgba(0,0,0,0.2);
+  font-weight: 700;
+  font-size: 1.05rem;
 }
+
+.secondary-action {
+  background: transparent;
+  color: var(--text-high);
+  border: 1px solid rgba(76,201,240,0.12);
+  padding: 10px 16px;
+  border-radius: 10px;
+}
+
+.icon-only { padding: 8px; }
+
+button:disabled { opacity: 0.45; cursor: not-allowed; }
 
 button:focus-visible, [role="button"]:focus-visible, a:focus-visible {
-  outline: 3px solid rgba(139,94,60,0.14);
+  outline: 2px solid rgba(0,230,255,0.18);
   outline-offset: 3px;
 }
 
-/* Small utilities */
+/* Remove visual "back" corner-action to match request; keep other corner actions but hide back icon style */
+.corner-action.left.icon-only { /* visually smaller and subtle; we'll remove explicit "back" text/icon in components */ padding: 8px; background: transparent; color: var(--text-high); border: 1px solid transparent; font-weight:700; }
+
+/* Dialog / Flow panels: center, compact copy, high contrast */
+.flow-panel {
+  width: min(640px, 92%);
+  margin: 6vh auto;
+  padding: 20px;
+  background: linear-gradient(180deg, rgba(12,16,22,0.95), rgba(8,10,14,0.9));
+  border-radius: 14px;
+  color: var(--text-high);
+  text-align: left;
+  box-shadow: var(--shadow-strong);
+  border: 1px solid rgba(76,201,240,0.12);
+}
+
+.flow-panel .eyebrow { color: var(--accent-2); font-weight: 700; letter-spacing: 1px; font-size: 0.85rem; margin: 0 0 6px 0; }
+.flow-panel h1 { margin: 2px 0 8px 0; font-size: 1.6rem; color: var(--text-high); }
+.flow-panel .panel-copy { color: var(--muted-text); margin: 0 0 12px 0; font-size: 0.98rem; }
+
+/* Countdown */
+.countdown-screen { display:flex; flex-direction:column; align-items:center; gap:8px; color:var(--text-high); }
+.countdown-screen strong { font-size: 5rem; color: var(--accent); text-shadow: 0 6px 36px rgba(0,230,255,0.06); }
+
+/* HUD */
+.hud-overlay { position: absolute; top: 16px; left: 16px; display:flex; gap:12px; background: rgba(0,0,0,0.36); padding:8px 12px; border-radius:10px; backdrop-filter: blur(6px); border: 1px solid rgba(76,201,240,0.04); }
+.hud-stat { color:var(--muted-text); font-size:0.9rem; }
+.hud-stat strong { display:block; color:var(--text-high); font-size:1.05rem; }
+
+/* Calibration / permission specific tweaks to avoid text being lost on background */
+.calibration-wrapper, .permission-wrapper { position: absolute; inset: 0; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; padding: 24px; }
+.calibration-card { background: var(--holo-glass); border-radius: 14px; padding: 18px; min-width: 280px; border: 1px solid var(--holo-border); box-shadow: var(--shadow); color: var(--text-high); }
+.hand-status { display:flex; flex-direction:column; align-items:center; gap:6px; color:var(--muted-text); }
+.hand-status.ready { color: var(--accent); font-weight:700; }
+.hand-status.missing { color: #ffb3b3; }
+.ready-progress { width:100%; height:6px; background: rgba(255,255,255,0.04); border-radius: 4px; overflow:hidden; }
+.ready-progress > span { display:block; height:100%; background:var(--accent); }
+
+/* Result grid compact */
+.result-grid { display:grid; grid-template-columns: repeat(2,1fr); gap:10px; margin:12px 0; color:var(--muted-text); }
+.result-grid strong { color: #bff8ff; font-size: 1.15rem; text-shadow: 0 6px 20px rgba(0,230,255,0.06); display:block; }
+
+/* Ensure text contrast over images / video */
+.card, .flow-panel, .calibration-card { mix-blend-mode: normal; }
+
+/* small utilities */
 .muted { color: var(--muted-text); }
-.lead { font-size: 1.05rem; color: var(--text-dark); }
+.lead { font-size: 1.05rem; color: var(--text-high); }
+
+/* Make sure game-feedback backgrounds are visible */
+.game-feedback.good { background: rgba(76,201,240,0.08); color: var(--text-high); }
+.game-feedback.warn { background: rgba(255,209,102,0.08); }
+.game-feedback.danger { background: rgba(255,107,107,0.12); }
+
+/* neon outline accents for panels and HUD */
+.card, .flow-panel, .calibration-card, .hud-overlay { border: 1px solid rgba(76,201,240,0.12); box-shadow: 0 10px 40px rgba(0,0,0,0.6), 0 0 18px rgba(76,201,240,0.04) inset; }
+
+/* corner action: visually icon-only, remove explicit "back" labels */
+.corner-action.left.icon-only { padding: 8px; background: transparent; color: var(--text-high); border: 1px solid transparent; font-weight:700; }
+.corner-action.left.icon-only[aria-label] { position: relative; }
+.corner-action.left.icon-only::after { content: ''; position: absolute; inset: -6px; border-radius: 8px; }
+
+/* ensure panel copy doesn't get lost on background */
+.flow-panel, .calibration-card { mix-blend-mode: normal; background: linear-gradient(180deg, rgba(6,8,10,0.94), rgba(8,10,12,0.9)); }
