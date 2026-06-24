@@ -40,20 +40,20 @@ export function StartPage({ onStart }: StartPageProps) {
 
         <div className="start-items-table">
           <div className="items-column good-items">
-            <h3>✅ เก็บ (บวกคะแนน)</h3>
+            <h3>✅ เก็บ (ทางเลือกที่ดี)</h3>
             <ul>
-              <li><span className="item-icon">⭐</span> ดาว <span className="item-score">+40</span></li>
-              <li><span className="item-icon">🛡️</span> โล่ <span className="item-score">+30</span></li>
-              <li><span className="item-icon">💖</span> หัวใจ <span className="item-score">+20</span></li>
+              <li><span className="item-icon">⚽</span> เล่นกีฬา <span className="item-score">+40</span></li>
+              <li><span className="item-icon">📚</span> หาความรู้ <span className="item-score">+30</span></li>
+              <li><span className="item-icon">🥗</span> รักสุขภาพ <span className="item-score">+20</span></li>
             </ul>
           </div>
           <div className="items-column bad-items">
-            <h3>❌ หลบ (ลบคะแนน)</h3>
+            <h3>❌ หลบ (ภัยคุกคาม)</h3>
             <ul>
-              <li><span className="item-icon">💉</span> เข็มฉีดยา <span className="item-score danger">-24</span></li>
-              <li><span className="item-icon">💀</span> สารพิษ <span className="item-score danger">-22</span></li>
-              <li><span className="item-icon">🍺</span> แอลกอฮอล์ <span className="item-score danger">-18</span></li>
-              <li><span className="item-icon">💊</span> ยาเสพติด <span className="item-score danger">-16</span></li>
+              <li><span className="item-icon">💉</span> สารเสพติดชนิดฉีด <span className="item-score danger">-24</span></li>
+              <li><span className="item-icon">💀</span> สารระเหยอันตราย <span className="item-score danger">-22</span></li>
+              <li><span className="item-icon">🍺</span> เครื่องดื่มมึนเมา <span className="item-score danger">-18</span></li>
+              <li><span className="item-icon">💊</span> ยาเสพติดให้โทษ <span className="item-score danger">-16</span></li>
             </ul>
           </div>
         </div>

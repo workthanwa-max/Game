@@ -4,9 +4,9 @@ import { labelForVisionMode } from '../components/HudOverlay'
 import { circlesOverlap } from './collision'
 import { activateItem, createItemPool } from './items'
 import { clamp, lerp, normalizeDelta } from './math'
-import { clearCanvas, drawEffects, drawHands, drawItems } from './renderer'
+import { clearCanvas, drawEffects, drawFloatingTexts, drawHands, drawItems, drawParticles } from './renderer'
 import { ObjectPool } from './ObjectPool'
-import type { GameEffect, GameItem, GameItemKind, HandCursor } from './types'
+import type { FloatingText, GameEffect, GameItem, GameItemKind, HandCursor, Particle } from './types'
 
 type GameEngineOptions = {
   canvas: HTMLCanvasElement
@@ -32,6 +32,8 @@ export class GameEngine {
   private readonly timeLimit: number
   private readonly pool = new ObjectPool(createItemPool(40))
   private readonly effects = createEffectPool(18)
+  private readonly floatingTexts = createFloatingTextPool(15)
+  private readonly particles = createParticlePool(60)
   private readonly leftHand: HandCursor = { x: 0, y: 0, radius: 30, active: false }
   private readonly rightHand: HandCursor = { x: 0, y: 0, radius: 30, active: false }
   private readonly hud = {
@@ -64,9 +66,9 @@ export class GameEngine {
   private lastHudTime = -1
   private lastHudCombo = -1
   private lastHudTracking = ''
-  private feedbackTimer = 0
-  private impactTimer = 0
   private pauseStartedAt = 0
+  private shakeTimer = 0
+  private hitPauseTimer = 0
   private frameSampleStartedAt = 0
   private frameSamples = 0
   private slowFrameReports = 0
@@ -74,7 +76,7 @@ export class GameEngine {
   private ecoMode = false
   private running = false
   private paused = false
-  private startSound: AudioContext | null = null
+  private audioCtx: AudioContext | null = null
 
   constructor({
     canvas,
@@ -86,7 +88,6 @@ export class GameEngine {
   }: GameEngineOptions) {
     const context = canvas.getContext('2d', {
       alpha: true,
-      desynchronized: true,
     })
 
     if (!context) {
@@ -143,8 +144,16 @@ export class GameEngine {
     this.effects.forEach((effect) => {
       effect.active = false
     })
-    this.clearFeedback()
-    this.shell?.classList.remove('low-health', 'impact-hit', 'impact-good', 'is-paused')
+    this.floatingTexts.forEach((txt) => {
+      txt.active = false
+    })
+    this.particles.forEach((p) => {
+      p.active = false
+    })
+    if (this.hud.feedback) {
+      this.hud.feedback.textContent = ''
+    }
+    this.shell?.classList.remove('low-health', 'is-paused')
     this.shell?.classList.toggle('perf-eco', this.ecoMode)
     this.resizeCanvas(true)
     this.observeCanvasSize()
@@ -198,12 +207,8 @@ export class GameEngine {
     this.pool.reset()
     this.resizeObserver?.disconnect()
     this.resizeObserver = null
-    window.clearTimeout(this.feedbackTimer)
-    window.clearTimeout(this.impactTimer)
     this.shell?.classList.remove(
       'low-health',
-      'impact-hit',
-      'impact-good',
       'is-paused',
       'perf-eco',
     )
@@ -234,6 +239,18 @@ export class GameEngine {
     const delta = normalizeDelta(now - this.lastTime)
     this.lastTime = now
 
+    if (this.hitPauseTimer > 0) {
+      this.hitPauseTimer -= delta
+      this.render()
+      this.updateHud()
+      this.animationFrameId = window.requestAnimationFrame(this.tick)
+      return
+    }
+
+    if (this.shakeTimer > 0) {
+      this.shakeTimer -= delta
+    }
+
     if (this.needsResize) {
       this.resizeCanvas()
       this.needsResize = false
@@ -259,7 +276,6 @@ export class GameEngine {
       this.ecoMode = true
       this.shell?.classList.add('perf-eco')
       this.heavyFrameSkip = HEAVY_FRAME_SKIP_FRAMES
-      this.showFeedback('โหมดประหยัด (อัตโนมัติ)', 'warn')
     }
 
     this.animationFrameId = window.requestAnimationFrame(this.tick)
@@ -383,7 +399,7 @@ export class GameEngine {
         )
 
       if (hitLeft || hitRight) {
-        this.collectItem(item.kind)
+        this.collectItem(item.kind, item.x, item.y)
         this.activateEffect(item.x, item.y, item.kind)
         this.releaseItem(item)
         continue
@@ -396,13 +412,15 @@ export class GameEngine {
     }
   }
 
-  private collectItem(kind: GameItemKind) {
+  private collectItem(kind: GameItemKind, x: number, y: number) {
     if (isHarmful(kind)) {
       const penalty = getDamage(kind)
       this.score -= penalty
       this.combo = 0
-      this.showFeedback(`-${penalty} คะแนน`, 'danger')
-      this.triggerImpact('impact-hit')
+      this.playDamageSound()
+      this.shakeTimer = 0.2
+      this.hitPauseTimer = 0.05
+      this.activateFloatingText(x, y, `-${penalty}`, '#ff477e')
       return
     }
 
@@ -412,8 +430,17 @@ export class GameEngine {
     this.combo += 1
     this.maxCombo = Math.max(this.maxCombo, this.combo)
     this.score += gain
-    this.showFeedback(`+${gain} คะแนน`, 'good')
-    this.triggerImpact('impact-good')
+    this.playCollectSound(this.combo)
+    
+    let textColor = '#7df9ff'
+    if (this.combo >= 20) {
+      textColor = '#ff6b6b'
+    } else if (this.combo >= 10) {
+      textColor = '#ffd166'
+    }
+    
+    this.activateFloatingText(x, y, `+${gain}`, textColor)
+    this.activateParticles(x, y, textColor)
   }
 
   private handleMissedItem(kind: GameItemKind) {
@@ -428,11 +455,27 @@ export class GameEngine {
 
   private render() {
     clearCanvas(this.context, this.canvasWidth, this.canvasHeight)
+    
+    if (this.shakeTimer > 0) {
+      const shakeX = (Math.random() - 0.5) * 14
+      const shakeY = (Math.random() - 0.5) * 14
+      this.context.save()
+      this.context.translate(shakeX, shakeY)
+    }
+
     drawItems(this.context, this.pool.all, this.ecoMode)
     if (!this.ecoMode) {
       drawEffects(this.context, this.effects)
+      drawParticles(this.context, this.particles)
     }
     drawHands(this.context, this.leftHand, this.rightHand)
+    if (!this.ecoMode) {
+      drawFloatingTexts(this.context, this.floatingTexts)
+    }
+
+    if (this.shakeTimer > 0) {
+      this.context.restore()
+    }
   }
 
   private updateHud() {
@@ -467,6 +510,7 @@ export class GameEngine {
     this.running = false
     window.cancelAnimationFrame(this.animationFrameId)
     clearCanvas(this.context, this.canvas.width, this.canvas.height)
+    this.playGameOverSound()
 
     this.onGameOver({
       score: this.score,
@@ -478,69 +522,160 @@ export class GameEngine {
     })
   }
 
-  private playStartSound() {
+  private initAudio() {
     try {
-      if (!this.startSound) {
-        this.startSound = new (window.AudioContext || (window as any).webkitAudioContext)()
+      if (!this.audioCtx) {
+        this.audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)()
       }
-      if (this.startSound.state === 'suspended') {
-        this.startSound.resume()
+      if (this.audioCtx.state === 'suspended') {
+        this.audioCtx.resume()
       }
-      const oscillator = this.startSound.createOscillator()
-      const gainNode = this.startSound.createGain()
-      
+      return this.audioCtx
+    } catch (e) {
+      return null
+    }
+  }
+
+  private playStartSound() {
+    const ctx = this.initAudio()
+    if (!ctx) return
+    try {
+      const oscillator = ctx.createOscillator()
+      const gainNode = ctx.createGain()
+
       oscillator.type = 'sine'
-      oscillator.frequency.setValueAtTime(440, this.startSound.currentTime) // A4
-      oscillator.frequency.exponentialRampToValueAtTime(880, this.startSound.currentTime + 0.1) // A5
-      oscillator.frequency.exponentialRampToValueAtTime(1760, this.startSound.currentTime + 0.3) // A6
-      
-      gainNode.gain.setValueAtTime(0, this.startSound.currentTime)
-      gainNode.gain.linearRampToValueAtTime(0.5, this.startSound.currentTime + 0.05)
-      gainNode.gain.exponentialRampToValueAtTime(0.01, this.startSound.currentTime + 0.5)
-      
+      oscillator.frequency.setValueAtTime(440, ctx.currentTime) // A4
+      oscillator.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.1) // A5
+      oscillator.frequency.exponentialRampToValueAtTime(1760, ctx.currentTime + 0.3) // A6
+
+      gainNode.gain.setValueAtTime(0, ctx.currentTime)
+      gainNode.gain.linearRampToValueAtTime(0.5, ctx.currentTime + 0.05)
+      gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5)
+
       oscillator.connect(gainNode)
-      gainNode.connect(this.startSound.destination)
-      
+      gainNode.connect(ctx.destination)
+
       oscillator.start()
-      oscillator.stop(this.startSound.currentTime + 0.5)
+      oscillator.stop(ctx.currentTime + 0.5)
     } catch (e) {
       console.warn('Could not play start sound', e)
     }
   }
 
-  private showFeedback(message: string, tone: 'danger' | 'good' | 'warn') {
-    if (!this.hud.feedback) {
-      return
-    }
+  private playCollectSound(combo: number) {
+    const ctx = this.initAudio()
+    if (!ctx) return
+    try {
+      const oscillator = ctx.createOscillator()
+      const gainNode = ctx.createGain()
 
-    window.clearTimeout(this.feedbackTimer)
-    this.hud.feedback.textContent = message
-    this.hud.feedback.className = `game-feedback show ${tone}`
-    this.feedbackTimer = window.setTimeout(() => {
-      this.clearFeedback()
-    }, 650)
+      const baseFreq = 440 // A4
+      const steps = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24] // Major pentatonic
+      const stepIndex = Math.min(Math.max(0, combo - 1), steps.length - 1)
+      const freq = baseFreq * Math.pow(2, steps[stepIndex] / 12)
+
+      oscillator.type = 'sine'
+      oscillator.frequency.setValueAtTime(freq, ctx.currentTime)
+
+      gainNode.gain.setValueAtTime(0, ctx.currentTime)
+      gainNode.gain.linearRampToValueAtTime(0.2, ctx.currentTime + 0.01)
+      gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15)
+
+      oscillator.connect(gainNode)
+      gainNode.connect(ctx.destination)
+
+      oscillator.start()
+      oscillator.stop(ctx.currentTime + 0.15)
+    } catch (e) {
+      // ignore
+    }
   }
 
-  private clearFeedback() {
-    if (!this.hud.feedback) {
-      return
-    }
+  private playDamageSound() {
+    const ctx = this.initAudio()
+    if (!ctx) return
+    try {
+      const oscillator = ctx.createOscillator()
+      const gainNode = ctx.createGain()
 
-    this.hud.feedback.textContent = ''
-    this.hud.feedback.className = 'game-feedback'
+      oscillator.type = 'sawtooth'
+      oscillator.frequency.setValueAtTime(150, ctx.currentTime)
+      oscillator.frequency.exponentialRampToValueAtTime(50, ctx.currentTime + 0.2)
+
+      gainNode.gain.setValueAtTime(0, ctx.currentTime)
+      gainNode.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.02)
+      gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2)
+
+      oscillator.connect(gainNode)
+      gainNode.connect(ctx.destination)
+
+      oscillator.start()
+      oscillator.stop(ctx.currentTime + 0.2)
+    } catch (e) {
+      // ignore
+    }
   }
 
-  private triggerImpact(className: 'impact-hit' | 'impact-good') {
-    if (!this.shell) {
-      return
-    }
+  private playGameOverSound() {
+    const ctx = this.initAudio()
+    if (!ctx) return
+    try {
+      const oscillator = ctx.createOscillator()
+      const gainNode = ctx.createGain()
 
-    window.clearTimeout(this.impactTimer)
-    this.shell.classList.remove('impact-hit', 'impact-good')
-    this.shell.classList.add(className)
-    this.impactTimer = window.setTimeout(() => {
-      this.shell?.classList.remove(className)
-    }, 180)
+      oscillator.type = 'triangle'
+      oscillator.frequency.setValueAtTime(440, ctx.currentTime)
+      oscillator.frequency.exponentialRampToValueAtTime(220, ctx.currentTime + 0.4)
+      oscillator.frequency.exponentialRampToValueAtTime(110, ctx.currentTime + 0.8)
+
+      gainNode.gain.setValueAtTime(0, ctx.currentTime)
+      gainNode.gain.linearRampToValueAtTime(0.4, ctx.currentTime + 0.05)
+      gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8)
+
+      oscillator.connect(gainNode)
+      gainNode.connect(ctx.destination)
+
+      oscillator.start()
+      oscillator.stop(ctx.currentTime + 0.8)
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  private activateFloatingText(x: number, y: number, text: string, color: string) {
+    if (this.ecoMode) return
+    const txt = this.floatingTexts.find(t => !t.active)
+    if (!txt) return
+    
+    txt.active = true
+    txt.x = x
+    txt.y = y
+    txt.text = text
+    txt.color = color
+    txt.alpha = 1
+    txt.age = 0
+  }
+
+  private activateParticles(x: number, y: number, color: string) {
+    if (this.ecoMode) return
+    let count = 5
+    for (let i = 0; i < this.particles.length && count > 0; i++) {
+      const p = this.particles[i]
+      if (!p.active) {
+        p.active = true
+        p.x = x
+        p.y = y
+        const angle = Math.random() * Math.PI * 2
+        const speed = Math.random() * 160 + 90
+        p.vx = Math.cos(angle) * speed
+        p.vy = Math.sin(angle) * speed
+        p.maxLife = Math.random() * 0.3 + 0.2
+        p.life = p.maxLife
+        p.color = color
+        p.size = Math.random() * 2.5 + 2
+        count--
+      }
+    }
   }
 
   private releaseItem(item: GameItem) {
@@ -593,6 +728,31 @@ export class GameEngine {
         effect.active = false
       }
     }
+
+    for (const txt of this.floatingTexts) {
+      if (!txt.active) continue
+      
+      txt.age += delta
+      txt.y -= 120 * delta
+      txt.alpha = Math.max(0, 1 - (txt.age / 0.8))
+      
+      if (txt.alpha <= 0) {
+        txt.active = false
+      }
+    }
+
+    for (const p of this.particles) {
+      if (!p.active) continue
+      
+      p.life -= delta
+      p.vy += 700 * delta
+      p.x += p.vx * delta
+      p.y += p.vy * delta
+      
+      if (p.life <= 0) {
+        p.active = false
+      }
+    }
   }
 
   private updatePerformance(now: number) {
@@ -624,7 +784,6 @@ export class GameEngine {
     if (!this.ecoMode && this.slowFrameReports >= 2) {
       this.ecoMode = true
       this.shell?.classList.add('perf-eco')
-      this.showFeedback('โหมดประหยัด', 'warn')
     }
 
     this.frameSamples = 0
@@ -680,11 +839,11 @@ function getDamage(kind: GameItemKind) {
 function getScore(kind: GameItemKind, combo: number) {
   const bonus = Math.floor(combo / 3) * 5
 
-  if (kind === 'star') {
+  if (kind === 'sport') {
     return 40 + bonus
   }
 
-  if (kind === 'shield') {
+  if (kind === 'book') {
     return 30 + bonus
   }
 
@@ -705,4 +864,30 @@ export function getRewardLevel(score: number) {
   }
 
   return 1
+}
+
+function createFloatingTextPool(size: number): FloatingText[] {
+  return Array.from({ length: size }, () => ({
+    active: false,
+    x: 0,
+    y: 0,
+    text: '',
+    color: '#ffffff',
+    alpha: 0,
+    age: 0,
+  }))
+}
+
+function createParticlePool(size: number): Particle[] {
+  return Array.from({ length: size }, () => ({
+    active: false,
+    x: 0,
+    y: 0,
+    vx: 0,
+    vy: 0,
+    life: 0,
+    maxLife: 0,
+    color: '#ffffff',
+    size: 0,
+  }))
 }

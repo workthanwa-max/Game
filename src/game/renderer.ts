@@ -1,13 +1,13 @@
-import type { GameEffect, GameItem, HandCursor } from './types'
+import type { FloatingText, GameEffect, GameItem, HandCursor, Particle } from './types'
 
 const itemColors = {
   pill: '#ff477e',
   needle: '#ff6b6b',
   powder: '#c9184a',
   alcohol: '#ff8fab',
-  shield: '#33d5ff',
-  heart: '#7df9ff',
-  star: '#ffffff',
+  sport: '#ffbe0b',
+  book: '#3a86ff',
+  health: '#38b000',
 }
 
 const itemLabels = {
@@ -15,9 +15,9 @@ const itemLabels = {
   needle: '💉',
   powder: '💀',
   alcohol: '🍺',
-  shield: '🛡️',
-  heart: '💖',
-  star: '⭐',
+  sport: '⚽',
+  book: '📚',
+  health: '🥗',
 }
 
 const itemSpriteCache = new Map<string, HTMLCanvasElement>()
@@ -28,6 +28,52 @@ export function clearCanvas(
   height: number,
 ) {
   context.clearRect(0, 0, width, height)
+}
+
+export function drawFloatingTexts(
+  context: CanvasRenderingContext2D,
+  texts: FloatingText[]
+) {
+  texts.forEach((txt) => {
+    if (!txt.active) return
+    
+    context.globalAlpha = txt.alpha
+    context.fillStyle = txt.color
+    
+    const popScale = 1 + Math.max(0, 1 - txt.age * 6)
+    const fontSize = Math.floor(24 * popScale)
+    
+    context.font = `900 ${fontSize}px system-ui`
+    context.textAlign = 'center'
+    context.textBaseline = 'middle'
+    
+    context.shadowColor = 'rgba(0, 0, 0, 0.6)'
+    context.shadowBlur = 4
+    context.shadowOffsetX = 0
+    context.shadowOffsetY = 2
+    
+    context.fillText(txt.text, txt.x, txt.y)
+    
+    context.shadowBlur = 0
+    context.globalAlpha = 1
+  })
+}
+
+export function drawParticles(
+  context: CanvasRenderingContext2D,
+  particles: Particle[]
+) {
+  particles.forEach((p) => {
+    if (!p.active) return
+    
+    const alpha = Math.max(0, p.life / p.maxLife)
+    context.globalAlpha = alpha
+    context.fillStyle = p.color
+    context.beginPath()
+    context.arc(p.x, p.y, p.size, 0, Math.PI * 2)
+    context.fill()
+  })
+  context.globalAlpha = 1
 }
 
 export function drawHands(
@@ -97,7 +143,7 @@ function drawHand(
     context.lineWidth = 4
     context.lineCap = 'round'
     context.lineJoin = 'round'
-    
+
     // MediaPipe Hand skeleton connections
     const connections = [
       [0, 1], [1, 2], [2, 3], [3, 4], // Thumb
@@ -106,7 +152,7 @@ function drawHand(
       [9, 13], [13, 14], [14, 15], [15, 16], // Ring
       [13, 17], [0, 17], [17, 18], [18, 19], [19, 20] // Pinky & Palm
     ]
-    
+
     connections.forEach(([start, end]) => {
       const p1 = hand.landmarks![start]
       const p2 = hand.landmarks![end]

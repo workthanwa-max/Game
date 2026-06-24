@@ -1,4 +1,4 @@
-export type GameItemKind = 'pill' | 'needle' | 'powder' | 'alcohol' | 'shield' | 'heart' | 'star'
+export type GameItemKind = 'pill' | 'needle' | 'powder' | 'alcohol' | 'sport' | 'book' | 'health'
 
 export type GameItem = {
   id: number
@@ -28,4 +28,26 @@ export type GameEffect = {
   radius: number
   alpha: number
   color: string
+}
+
+export type FloatingText = {
+  active: boolean
+  x: number
+  y: number
+  text: string
+  color: string
+  alpha: number
+  age: number
+}
+
+export type Particle = {
+  active: boolean
+  x: number
+  y: number
+  vx: number
+  vy: number
+  life: number
+  maxLife: number
+  color: string
+  size: number
 }

@@ -5,9 +5,9 @@ const itemKinds: GameItemKind[] = [
   'needle',
   'powder',
   'alcohol',
-  'shield',
-  'heart',
-  'star',
+  'book',
+  'health',
+  'sport',
 ]
 const harmfulKinds: GameItemKind[] = ['pill', 'needle', 'powder', 'alcohol']
 
@@ -78,22 +78,22 @@ export function activateItem(
 function pickItemKindFromRand(rand: () => number): GameItemKind {
   const p = rand()
   if (p < 0.38) return harmfulKinds[Math.floor(rand() * harmfulKinds.length)]
-  if (p < 0.58) return 'star'
-  if (p < 0.78) return 'heart'
-  return 'shield'
+  if (p < 0.58) return 'sport'
+  if (p < 0.78) return 'book'
+  return 'health'
 }
 
 function getItemValue(kind: GameItemKind) {
-  if (kind === 'shield') {
+  if (kind === 'book') {
     return 30
   }
 
-  if (kind === 'heart') {
+  if (kind === 'health') {
     return 20
   }
 
-  if (kind === 'star') {
-    return 35
+  if (kind === 'sport') {
+    return 40
   }
 
   return -18
